@@ -3,9 +3,12 @@ import os
 import json
 import requests
 import boto3
+import sys
 
 from pathlib import Path
 from dotenv import load_dotenv
+from awsglue.utils import getResolvedOptions
+
 
 
 # -------------------------------------------------------------------
@@ -14,14 +17,24 @@ from dotenv import load_dotenv
 # Load local environment variables.
 # AWS Glue will use job configuration instead of a local .env file.
 
-project_root = Path(__file__).resolve().parents[2]
-load_dotenv(project_root / ".env")
+# Local development uses .env; AWS Glue uses job parameters.
+if "--JOB_NAME" in sys.argv:
+    args = getResolvedOptions(
+        sys.argv,
+        ["INDEX_URL", "BRONZE_BUCKET"]
+    )
 
-INDEX_URL = os.environ["INDEX_URL"]
-BRONZE_BUCKET = os.environ["BRONZE_BUCKET"]
+    INDEX_URL = args["INDEX_URL"]
+    BRONZE_BUCKET = args["BRONZE_BUCKET"]
 
-print(f"INDEX_URL: {INDEX_URL}")
+else:
+    project_root = Path(__file__).resolve().parents[2]
+    load_dotenv(project_root / ".env")
 
+    INDEX_URL = os.environ["INDEX_URL"]
+    BRONZE_BUCKET = os.environ["BRONZE_BUCKET"]
+
+# establish s3 client
 s3 = boto3.client("s3")
 
 
