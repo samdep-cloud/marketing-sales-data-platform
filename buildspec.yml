@@ -1,0 +1,12 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Preparing deployment..."
+
+  build:
+    commands:
+      - echo "Deploying Python scripts to S3..."
+      - aws s3 sync src/ s3://sdep-marketing-sales-data-platform/scripts/ --exclude "__pycache__/*" --exclude "*.pyc" --delete
+      - echo "Deployment complete."
