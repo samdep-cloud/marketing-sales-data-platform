@@ -7,7 +7,6 @@ import boto3
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
-from awsglue.utils import getResolvedOptions
 
 # ----------------------------------------------------------------
 
@@ -25,6 +24,7 @@ def get_wistia_token():
 # CONFIGURATION
 
 if "--JOB_NAME" in sys.argv:
+    from awsglue.utils import getResolvedOptions
     args = getResolvedOptions(sys.argv, ["BRONZE_BUCKET"])
     BRONZE_BUCKET = args["BRONZE_BUCKET"]
 else:
@@ -44,6 +44,7 @@ HEADERS = {
     "X-Wistia-API-Version": "2026-09"
 }
 
+# establish s3 client
 s3 = boto3.client("s3")
 
 # -------------------------------------------------------------------
