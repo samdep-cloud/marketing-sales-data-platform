@@ -7,23 +7,36 @@ import boto3
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
+from awsglue.utils import getResolvedOptions
 
+# ----------------------------------------------------------------
+
+import sys
+
+def get_wistia_token():
+    if "--JOB_NAME" in sys.argv:
+        client = boto3.client("secretsmanager", region_name="us-east-1")
+        response = client.get_secret_value(SecretId="sdep/wistia/api-token")
+        return json.loads(response["SecretString"])["WISTIA_API_TOKEN"]
+
+    return os.environ["WISTIA_API_TOKEN"]
 
 # -------------------------------------------------------------------
 # CONFIGURATION
-#
-# Load local environment variables from .env.
-# In AWS Glue, these values will come from the job configuration
-# and a secure token store rather than a local .env file.
 
-project_root = Path(__file__).resolve().parents[2]
-load_dotenv(project_root / ".env")
+if "--JOB_NAME" in sys.argv:
+    args = getResolvedOptions(sys.argv, ["BRONZE_BUCKET"])
+    BRONZE_BUCKET = args["BRONZE_BUCKET"]
+else:
+    project_root = Path(__file__).resolve().parents[2]
+    load_dotenv(project_root / ".env")
+    BRONZE_BUCKET = os.environ["BRONZE_BUCKET"]
 
-WISTIA_API_TOKEN = os.environ["WISTIA_API_TOKEN"]
-BRONZE_BUCKET = os.environ["BRONZE_BUCKET"]
+WISTIA_API_TOKEN = get_wistia_token()
+
+# --------------------------------------------------------------------
 
 TARGET_MEDIA_IDS = ["8hunphufxp", "9k4tbcdfg0"]
-
 BASE_URL = "https://api.wistia.com/modern"
 
 HEADERS = {
@@ -32,7 +45,6 @@ HEADERS = {
 }
 
 s3 = boto3.client("s3")
-
 
 # -------------------------------------------------------------------
 # FUNCTION 1: FETCH MEDIA METADATA
@@ -196,12 +208,17 @@ def main():
 
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
 
-    # Initial historical backfill: Wistia retains up to 2 years of events.
-    start_date = (
-        datetime.now(timezone.utc) - timedelta(days=730)
-    ).date().isoformat()
+    # # Initial historical backfill: Wistia retains up to 2 years of events.
+    # start_date = (
+    #     datetime.now(timezone.utc) - timedelta(days=730)
+    # ).date().isoformat()
 
-    end_date = datetime.now(timezone.utc).date().isoformat()
+    # end_date = datetime.now(timezone.utc).date().isoformat()
+
+    # Daily ingestion: overlapping two-day window.
+    now = datetime.now(timezone.utc)
+    start_date = (now - timedelta(days=2)).date().isoformat()
+    end_date = now.date().isoformat()
 
     media_records = []
     stats_records = []
@@ -232,8 +249,8 @@ def main():
 
         # -----------------------------------------------------------
         # DATASET 3: VISITOR VIEWING EVENTS
-        # Individual viewing activity for this video.
-        # Restricted to January 1, 2026 through today.
+        # Individual viewing activity for this video
+        # Retrieves events from the overlapping two-day window
 
         events = fetch_visitors(
             media_id,
