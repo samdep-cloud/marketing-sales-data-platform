@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import sys
 
 def get_wistia_token():
-    if "--JOB_NAME" in sys.argv:
+    if "--BRONZE_BUCKET" in sys.argv:
         client = boto3.client("secretsmanager", region_name="us-east-1")
         response = client.get_secret_value(SecretId="sdep/wistia/api-token")
         return json.loads(response["SecretString"])["WISTIA_API_TOKEN"]
@@ -23,8 +23,9 @@ def get_wistia_token():
 # -------------------------------------------------------------------
 # CONFIGURATION
 
-if "--JOB_NAME" in sys.argv:
+if "--BRONZE_BUCKET" in sys.argv:
     from awsglue.utils import getResolvedOptions
+
     args = getResolvedOptions(sys.argv, ["BRONZE_BUCKET"])
     BRONZE_BUCKET = args["BRONZE_BUCKET"]
 else:
@@ -33,7 +34,6 @@ else:
     BRONZE_BUCKET = os.environ["BRONZE_BUCKET"]
 
 WISTIA_API_TOKEN = get_wistia_token()
-
 # --------------------------------------------------------------------
 
 TARGET_MEDIA_IDS = ["8hunphufxp", "9k4tbcdfg0"]
