@@ -1,4 +1,3 @@
-
 import os
 import json
 import requests
@@ -7,7 +6,6 @@ import sys
 
 from pathlib import Path
 from dotenv import load_dotenv
-from awsglue.utils import getResolvedOptions
 
 # -------------------------------------------------------------------
 # CONFIGURATION
@@ -15,8 +13,11 @@ from awsglue.utils import getResolvedOptions
 # Load local environment variables.
 # AWS Glue will use job configuration instead of a local .env file.
 
-# Local development uses .env; AWS Glue uses job parameters.
-if "--JOB_NAME" in sys.argv:
+# Local development uses .env; AWS Glue uses job parameters established in glue directly
+# CONFIGURATION
+
+if "--INDEX_URL" in sys.argv:
+    from awsglue.utils import getResolvedOptions
     args = getResolvedOptions(
         sys.argv,
         ["INDEX_URL", "BRONZE_BUCKET"]
@@ -32,9 +33,9 @@ else:
     INDEX_URL = os.environ["INDEX_URL"]
     BRONZE_BUCKET = os.environ["BRONZE_BUCKET"]
 
+
 # establish s3 client
 s3 = boto3.client("s3")
-
 
 # -------------------------------------------------------------------
 # FUNCTION 1: FETCH AVAILABLE SPEND FILES
