@@ -22,7 +22,6 @@ df = df.select(
     F.to_timestamp("payload.scheduled_event.start_time").alias("meeting_start"),
     F.to_timestamp("payload.scheduled_event.end_time").alias("meeting_end"),
     F.col("payload.name").alias("invitee_name"),
-    F.col("payload.event_type").alias("event_type_id"),
     F.col("payload.tracking.utm_source").alias("utm_source"),
     F.col("payload.rescheduled").alias("rescheduled"),
     F.col("payload.status").alias("status"),
