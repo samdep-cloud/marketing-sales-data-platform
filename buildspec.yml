@@ -10,3 +10,20 @@ phases:
       - echo "Deploying Python scripts to S3..."
       - aws s3 sync src/ s3://sdep-marketing-sales-data-platform/scripts/ --exclude "__pycache__/*" --exclude "*.pyc" --delete
       - echo "Deployment complete."
+
+      # Future enhancement: automated Lambda deployments
+      # Glue jobs load scripts directly from their configured S3 locations.
+      # Lambda functions require an explicit code deployment.
+      #
+      # Example: Close webhook Lambda
+      # Package the handler and any required dependencies into a ZIP.
+      # zip -j close_webhook.zip src/ingestion/close_webhook.py
+      #
+      # Upload deployment artifact to S3.
+      # aws s3 cp close_webhook.zip s3://sdep-marketing-sales-data-platform/deployments/close_webhook.zip
+      #
+      # Deploy updated Lambda code.
+      # aws lambda update-function-code --function-name sdep-close-webhook-ingestion --s3-bucket sdep-marketing-sales-data-platform --s3-key deployments/close_webhook.zip
+      #
+      # Extend to Calendly ingestion and Close enrichment Lambdas.
+      # Requires appropriate CodeBuild IAM permissions.

@@ -5,14 +5,6 @@ import boto3
 
 s3 = boto3.client("s3")
 
-# Complete Lambda will:
-# Receive the HTTP request from API Gateway
-# Parse the JSON body into a dictionary
-# Validate that the Calendly event is a newly created invitee
-# Extract the event type and invitee ID
-# Write the original Calendly payload to S3
-# Return a successful HTTP response to Calendly
-
 BUCKET_NAME = os.environ["BRONZE_BUCKET"]
 
 def lambda_handler(event, context):

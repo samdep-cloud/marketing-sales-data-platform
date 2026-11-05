@@ -5,16 +5,6 @@ import boto3
 s3 = boto3.client("s3")
 sqs = boto3.client("sqs")
 
-# Complete Lambda will:
-
-# Receive the HTTP request from API Gateway
-# Parse the JSON body into a dictionary
-# Validate that the Close event is a newly created lead
-# Extract the lead ID and webhook event ID
-# Write the original Close payload to S3
-# Queue the event for delayed enrichment using SQS
-# Return a successful HTTP response to Close
-
 BUCKET_NAME = os.environ["BRONZE_BUCKET"]
 QUEUE_URL = os.environ["CLOSE_QUEUE_URL"]
 
@@ -35,7 +25,7 @@ def lambda_handler(event, context):
     if action != "created" or object_type != "lead":
         return {
             "statusCode": 200,
-            "body": json.dumps({"message": "Event ingored"})
+            "body": json.dumps({"message": "Event ignored"})
         }
 
     # Persist the original webhook payload

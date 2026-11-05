@@ -1,8 +1,32 @@
+# Environment variables and credentials
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+
+# Virtual environments
 .venv/
-.vscode/
+venv/
+
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editor
+.vscode/
+
+# Generated artifacts
 build/
+dist/
+*.egg-info/
+cdk.out/
+
+# Source data containing sensitive information
+sample_data/

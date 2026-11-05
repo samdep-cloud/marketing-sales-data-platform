@@ -1,28 +1,15 @@
-
 import os
+import sys
 import json
-import requests
-import boto3
-
 from pathlib import Path
-from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
-# ----------------------------------------------------------------
+import boto3
+import requests
+from dotenv import load_dotenv
 
-import sys
 
-def get_wistia_token():
-    if "--BRONZE_BUCKET" in sys.argv:
-        client = boto3.client("secretsmanager", region_name="us-east-1")
-        response = client.get_secret_value(SecretId="sdep/wistia/api-token")
-        return json.loads(response["SecretString"])["WISTIA_API_TOKEN"]
-
-    return os.environ["WISTIA_API_TOKEN"]
-
-# -------------------------------------------------------------------
-# CONFIGURATION
-
+# Configuration: local development uses .env; AWS Glue uses job parameters.
 if "--BRONZE_BUCKET" in sys.argv:
     from awsglue.utils import getResolvedOptions
 
@@ -33,8 +20,18 @@ else:
     load_dotenv(project_root / ".env")
     BRONZE_BUCKET = os.environ["BRONZE_BUCKET"]
 
+
+def get_wistia_token():
+    """Retrieve the Wistia API token from Secrets Manager or local environment."""
+    if "--BRONZE_BUCKET" in sys.argv:
+        client = boto3.client("secretsmanager", region_name="us-east-1")
+        response = client.get_secret_value(SecretId="sdep/wistia/api-token")
+        return json.loads(response["SecretString"])["WISTIA_API_TOKEN"]
+
+    return os.environ["WISTIA_API_TOKEN"]
+
+
 WISTIA_API_TOKEN = get_wistia_token()
-# --------------------------------------------------------------------
 
 TARGET_MEDIA_IDS = ["8hunphufxp", "9k4tbcdfg0"]
 BASE_URL = "https://api.wistia.com/modern"
@@ -44,79 +41,35 @@ HEADERS = {
     "X-Wistia-API-Version": "2026-09"
 }
 
-# establish s3 client
 s3 = boto3.client("s3")
 
-# -------------------------------------------------------------------
-# FUNCTION 1: FETCH MEDIA METADATA
-#
-# Retrieves information about ONE specific Wistia video.
-#
-# Media metadata describes WHAT the video is, including
-# its ID, title, creation date, and other attributes.
-#
-# We call this function once for each required media ID.
-# No account-wide pagination is needed.
 
 def fetch_media(media_id):
-
-    url = f"{BASE_URL}/medias/{media_id}"
-
+    """Retrieve metadata for a Wistia video."""
     response = requests.get(
-        url,
+        f"{BASE_URL}/medias/{media_id}",
         headers=HEADERS,
         timeout=30
     )
-
     response.raise_for_status()
 
     return response.json()
 
-
-# -------------------------------------------------------------------
-# FUNCTION 2: FETCH MEDIA ENGAGEMENT STATISTICS
-#
-# Retrieves aggregate performance metrics for ONE video.
-#
-# These include measures such as plays, loads, play rate,
-# and engagement, depending on the API response.
-#
-# Refresh daily because existing videos continue to
-# accumulate views and engagement.
 
 def fetch_media_stats(media_id):
-
-    url = f"{BASE_URL}/stats/medias/{media_id}"
-
+    """Retrieve cumulative engagement statistics for a Wistia video."""
     response = requests.get(
-        url,
+        f"{BASE_URL}/stats/medias/{media_id}",
         headers=HEADERS,
         timeout=30
     )
-
     response.raise_for_status()
 
     return response.json()
 
 
-# -------------------------------------------------------------------
-# FUNCTION 3: FETCH VIDEO VIEWING EVENTS
-#
-# Retrieves individual viewing events for ONE video.
-#
-# Unlike aggregate statistics, these records represent
-# viewing activity and may contain visitor identifiers,
-# engagement details, and other event attributes.
-#
-# Uses:
-# - media_id: Restricts events to the requested video
-# - start_date/end_date: Restricts the activity period
-# - page/per_page: Retrieves all pages of matching events
-#
-# Wistia retains viewing events for up to two years.
-
 def fetch_visitors(media_id, start_date, end_date):
-
+    """Retrieve all pages of viewing events within the specified date range."""
     url = f"{BASE_URL}/stats/events"
 
     all_events = []
@@ -124,7 +77,6 @@ def fetch_visitors(media_id, start_date, end_date):
     per_page = 100
 
     while True:
-
         response = requests.get(
             url,
             headers=HEADERS,
@@ -137,15 +89,12 @@ def fetch_visitors(media_id, start_date, end_date):
             },
             timeout=30
         )
-
         response.raise_for_status()
 
         events = response.json()
 
         if not isinstance(events, list):
-            raise ValueError(
-                "Unexpected Wistia events response format"
-            )
+            raise ValueError("Unexpected Wistia events response format")
 
         all_events.extend(events)
 
@@ -164,14 +113,8 @@ def fetch_visitors(media_id, start_date, end_date):
     return all_events
 
 
-# -------------------------------------------------------------------
-# HELPER: SAVE RAW DATA TO S3 BRONZE
-#
-# Saves each dataset separately as a timestamped JSON file.
-# Bronze preserves the raw API responses for later processing.
-
 def save_to_s3(dataset, records, timestamp):
-
+    """Preserve API responses as timestamped JSON files in S3 Bronze."""
     object_key = (
         f"bronze/wistia/{dataset}/"
         f"{dataset}_{timestamp}.json"
@@ -189,34 +132,11 @@ def save_to_s3(dataset, records, timestamp):
     return object_key
 
 
-# -------------------------------------------------------------------
-# MAIN: DAILY WISTIA BATCH INGESTION
-#
-# Processes only the two videos required by the assignment.
-#
-# 1. Refresh video metadata
-# 2. Refresh aggregate engagement statistics
-# 3. Retrieve viewing events within the configured date window
-# 4. Save each dataset separately to S3 Bronze
-#
-# Daily event ingestion uses a two-day overlapping window.
-# An optional WISTIA_START_DATE allows a historical backfill.
-#
-# Silver will deduplicate overlapping event records.
-# Gold will recalculate reporting metrics.
-
 def main():
-
+    """Ingest Wistia metadata, statistics, and recent viewing events."""
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
 
-    # # Initial historical backfill: Wistia retains up to 2 years of events.
-    # start_date = (
-    #     datetime.now(timezone.utc) - timedelta(days=730)
-    # ).date().isoformat()
-
-    # end_date = datetime.now(timezone.utc).date().isoformat()
-
-    # Daily ingestion: overlapping two-day window.
+    # Overlap daily ingestion windows to capture recent viewing events.
     now = datetime.now(timezone.utc)
     start_date = (now - timedelta(days=2)).date().isoformat()
     end_date = now.date().isoformat()
@@ -225,33 +145,17 @@ def main():
     stats_records = []
     visitor_events = []
 
-    # Process only the two required Wistia videos
     for media_id in TARGET_MEDIA_IDS:
-
         print(f"Processing media: {media_id}", flush=True)
-
-        # -----------------------------------------------------------
-        # DATASET 1: MEDIA METADATA
-        # Describes the video: ID, title, creation date, etc.
 
         media = fetch_media(media_id)
         media_records.append(media)
 
-        # -----------------------------------------------------------
-        # DATASET 2: MEDIA ENGAGEMENT STATISTICS
-        # Aggregate plays, watch time, play rate, etc.
-
         stats = fetch_media_stats(media_id)
-
         stats_records.append({
             "media_id": media_id,
             "stats": stats
         })
-
-        # -----------------------------------------------------------
-        # DATASET 3: VISITOR VIEWING EVENTS
-        # Individual viewing activity for this video
-        # Retrieves events from the overlapping two-day window
 
         events = fetch_visitors(
             media_id,
@@ -265,9 +169,7 @@ def main():
                 "event": event
             })
 
-    # ---------------------------------------------------------------
-    # SAVE ALL THREE DATASETS TO S3 BRONZE
-
+    # Preserve each source dataset independently for Silver processing.
     save_to_s3("media", media_records, timestamp)
     save_to_s3("stats", stats_records, timestamp)
     save_to_s3("visitors", visitor_events, timestamp)
@@ -282,8 +184,6 @@ def main():
         "end_date": end_date
     }
 
-
-# -------------------------------------------------------------------
 
 if __name__ == "__main__":
     result = main()

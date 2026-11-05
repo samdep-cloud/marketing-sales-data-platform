@@ -1,7 +1,5 @@
-
 import json
 import os
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Set environment variable before importing Lambda
@@ -16,12 +14,15 @@ with patch("boto3.client") as mock_client:
 
 
 def test_calendly_webhook():
-    # Load sample Calendly payload
-    project_root = Path(__file__).resolve().parents[1]
-    sample_path = project_root / "sample_data" / "calendly" / "calendly_event.json"
-
-    with open(sample_path, "r") as file:
-        sample_event = json.load(file)
+    # Fictional Calendly webhook payload
+    sample_event = {
+        "event": "invitee.created",
+        "payload": {
+            "uri": "https://api.calendly.com/scheduled_events/test-event/invitees/test-invitee",
+            "name": "Test User",
+            "email": "test@example.com",
+        },
+    }
 
     # Simulate API Gateway request
     event = {
@@ -41,5 +42,5 @@ def test_calendly_webhook():
     call_args = mock_s3.put_object.call_args.kwargs
 
     assert call_args["Bucket"] == "test-bucket"
-    assert call_args["Key"].startswith("bronze/calendly/invitee_")
+    assert call_args["Key"] == "bronze/calendly/invitee_test-invitee.json"
     assert json.loads(call_args["Body"]) == sample_event

@@ -1,4 +1,5 @@
-json
+boto3
 requests
-pytest
 python-dotenv
+pytest
+pyspark

@@ -1,23 +1,18 @@
-import os
-import json
-import requests
-import boto3
-import sys
 
+import os
+import sys
+import json
 from pathlib import Path
+
+import boto3
+import requests
 from dotenv import load_dotenv
 
-# -------------------------------------------------------------------
-# CONFIGURATION
-#
-# Load local environment variables.
-# AWS Glue will use job configuration instead of a local .env file.
 
-# Local development uses .env; AWS Glue uses job parameters established in glue directly
-# CONFIGURATION
-
+# Configuration: local development uses .env; AWS Glue uses job parameters.
 if "--INDEX_URL" in sys.argv:
     from awsglue.utils import getResolvedOptions
+
     args = getResolvedOptions(
         sys.argv,
         ["INDEX_URL", "BRONZE_BUCKET"]
@@ -34,46 +29,28 @@ else:
     BRONZE_BUCKET = os.environ["BRONZE_BUCKET"]
 
 
-# establish s3 client
 s3 = boto3.client("s3")
 
-# -------------------------------------------------------------------
-# FUNCTION 1: FETCH AVAILABLE SPEND FILES
-#
-# The public S3 file index lists daily JSON filenames.
-# Each file contains marketing spend by channel and date.
-#
-# The index allows us to discover available files without
-# guessing dates or constructing nonexistent filenames.
 
 def fetch_file_index():
-
+    """Retrieve available marketing spend filenames from the source index."""
     response = requests.get(INDEX_URL, timeout=30)
     response.raise_for_status()
 
     return response.json()["files"]
 
 
-# -------------------------------------------------------------------
-# FUNCTION 2: INGEST NEW SPEND FILES
-#
-# Checks whether each source file already exists in our Bronze bucket.
-# Downloads and saves only files that have not been ingested.
-#
-# This provides simple file-level incremental ingestion.
-
 def ingest_spend_files(filenames):
-
+    """Ingest source files not already present in S3 Bronze."""
     ingested = 0
     skipped = 0
 
     base_url = INDEX_URL.rsplit("/", 1)[0]
 
     for filename in filenames:
-
         object_key = f"bronze/spend/{filename}"
 
-        # Check whether this file already exists in Bronze.
+        # Skip files already ingested.
         try:
             s3.head_object(
                 Bucket=BRONZE_BUCKET,
@@ -85,14 +62,12 @@ def ingest_spend_files(filenames):
             continue
 
         except s3.exceptions.ClientError as error:
-            # A 404 means the file does not exist yet.
-            # Other errors should not be silently ignored.
             status = error.response["Error"]["Code"]
 
             if status not in ("404", "NoSuchKey", "NotFound"):
                 raise
 
-        # Retrieve the source JSON file.
+        # Retrieve source data.
         file_url = f"{base_url}/{filename}"
 
         response = requests.get(file_url, timeout=30)
@@ -100,7 +75,7 @@ def ingest_spend_files(filenames):
 
         records = response.json()
 
-        # Preserve the source data in S3 Bronze.
+        # Preserve source records in S3 Bronze.
         s3.put_object(
             Bucket=BRONZE_BUCKET,
             Key=object_key,
@@ -114,18 +89,8 @@ def ingest_spend_files(filenames):
     return ingested, skipped
 
 
-# -------------------------------------------------------------------
-# MAIN: DAILY MARKETING SPEND INGESTION
-#
-# 1. Retrieve the public file index.
-# 2. Identify files not yet present in S3 Bronze.
-# 3. Download and save new files.
-#
-# Initial run: Historical backfill of indexed files.
-# Daily runs: Only newly available files are ingested.
-
 def main():
-
+    """Run incremental marketing spend ingestion."""
     filenames = fetch_file_index()
 
     print(f"Available spend files: {len(filenames)}")
@@ -140,4 +105,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
