@@ -8,7 +8,7 @@ The project demonstrates webhook ingestion, asynchronous enrichment, scheduled A
 
 ## Architecture
 
-![Marketing–Sales Data Platform Architecture](docs/01_marketing-sales-leads-pipeline.drawio.png)
+![Marketing–Sales Data Platform Architecture](docs/01_architecture.png)
 
 The platform follows a Bronze/Silver architecture, with a Gold reporting layer planned.
 
